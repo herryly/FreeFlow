@@ -246,7 +246,8 @@ public class FreeFlowContainer extends AbsLayoutContainer {
 
 		}
 		
-		if (widthMode != MeasureSpec.UNSPECIFIED && heightMode != MeasureSpec.UNSPECIFIED) {
+//		if (widthMode != MeasureSpec.UNSPECIFIED && heightMode != MeasureSpec.UNSPECIFIED) {
+		if (markAdapterDirty || markLayoutDirty) {
 			markAdapterDirty = false;
 			markLayoutDirty = false;
 			computeLayout(afterWidth, afterHeight);		
