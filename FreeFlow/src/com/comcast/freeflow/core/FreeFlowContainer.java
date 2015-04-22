@@ -33,6 +33,7 @@ import android.util.Pair;
 import android.view.ActionMode;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.HapticFeedbackConstants;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
@@ -183,6 +184,12 @@ public class FreeFlowContainer extends AbsLayoutContainer {
 			OnTouchModeChangedListener onTouchModeChangedListener) {
 		mOnTouchModeChangedListener = onTouchModeChangedListener;
 	}
+
+	/**
+     * The value used by keyboard response
+     */
+    private int SCROLL_DURATION = 0x168;
+    private int mScrollDuration = SCROLL_DURATION;
 
 	public FreeFlowContainer(Context context) {
 		super(context);
@@ -1234,6 +1241,13 @@ public class FreeFlowContainer extends AbsLayoutContainer {
 		moveViewport(fling);
 	}
 
+	protected void moveViewportSmoothBy(float movementX, float movementY,
+            boolean fling) {
+        scroller.startScroll(viewPortX, viewPortY, (int) movementX,
+                (int) movementY, mScrollDuration);
+        post(flingRunnable);
+    }
+
 	protected void moveViewPort(int left, int top, boolean isInFlingMode) {
 		viewPortX = left;
 		viewPortY = top;
@@ -1949,6 +1963,100 @@ public class FreeFlowContainer extends AbsLayoutContainer {
 
 		public void onScroll(FreeFlowContainer container);
 	}
+	
+	/******** SUPPORT KEYBOARD EVENT ********/
+    static final float MAX_SCROLL_FACTOR = 0.5f;
+
+    /**
+     * @return The maximum amount this scroll view will scroll in response to an
+     *         arrow event.
+     */
+    public int getMaxScrollXAmount() {
+        return (int) (MAX_SCROLL_FACTOR * (this.getRight() - this.getLeft()));
+    }
+
+    /**
+     * @return The maximum amount this scroll view will scroll in response to an
+     *         arrow event.
+     */
+    public int getMaxScrollYAmount() {
+        return (int) (MAX_SCROLL_FACTOR * (this.getBottom() - this.getTop()));
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        // Let the focused view and/or our descendants get the key first
+        return super.dispatchKeyEvent(event) || executeKeyEvent(event);
+    }
+
+    /**
+     * You can call this function yourself to have the scroll view perform
+     * scrolling from a key event, just as if the event had been dispatched to
+     * it by the view hierarchy.
+     * 
+     * @param event
+     *            The key event to execute.
+     * @return Return true if the event was handled, else false.
+     */
+    public boolean executeKeyEvent(KeyEvent event) {
+        if (!canScroll()) {
+            return false;
+        }
+
+        boolean handled = false;
+
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+                handled = arrowScroll(View.FOCUS_UP);
+                break;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                handled = arrowScroll(View.FOCUS_DOWN);
+                break;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                handled = arrowScroll(View.FOCUS_LEFT);
+                break;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                handled = arrowScroll(View.FOCUS_RIGHT);
+                break;
+            }
+        }
+
+        return handled;
+    }
+
+    /**
+     * Handle scrolling in response to an up or down arrow click.
+     * 
+     * @param direction
+     *            The direction corresponding to the arrow key that was pressed
+     * @return True if we consumed the event, false otherwise
+     */
+    public boolean arrowScroll(int direction) {
+
+        final int maxXJump = getMaxScrollXAmount();
+        final int maxYJump = getMaxScrollYAmount();
+        int scrollDeltaX = 0;
+        int scrollDeltaY = 0;
+
+        if (direction == View.FOCUS_UP) {
+            scrollDeltaY = -Math.min(viewPortY, maxYJump);
+        } else if (direction == View.FOCUS_DOWN) {
+            scrollDeltaY = Math.min(mScrollableHeight - viewPortY, maxYJump);
+        } else if (direction == View.FOCUS_LEFT) {
+            scrollDeltaX = -Math.min(viewPortX, maxXJump);
+        } else if (direction == View.FOCUS_RIGHT) {
+            scrollDeltaX = Math.min(mScrollableWidth - viewPortX, maxXJump);
+        }
+
+        if (scrollDeltaX == 0 && scrollDeltaY == 0) {
+            return false;
+        }
+
+        moveViewportSmoothBy(scrollDeltaX, scrollDeltaY, false);
+
+        return true;
+    }
 
 	/******** DEBUGGING HELPERS *******/
 
