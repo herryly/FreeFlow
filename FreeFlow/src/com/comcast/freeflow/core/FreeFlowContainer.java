@@ -247,11 +247,11 @@ public class FreeFlowContainer extends AbsLayoutContainer {
 		}
 		
 //		if (widthMode != MeasureSpec.UNSPECIFIED && heightMode != MeasureSpec.UNSPECIFIED) {
-		if (markAdapterDirty || markLayoutDirty) {
-			markAdapterDirty = false;
-			markLayoutDirty = false;
-			computeLayout(afterWidth, afterHeight);		
-		}
+        if (markAdapterDirty || markLayoutDirty) {
+            // markAdapterDirty = false;
+            // markLayoutDirty = false;
+            computeLayout(afterWidth, afterHeight);
+        }
 
 		if (dataSetChanged) {
 			dataSetChanged = false;
@@ -561,6 +561,9 @@ public class FreeFlowContainer extends AbsLayoutContainer {
 		if (viewPortY > mScrollableHeight)
 			viewPortY = mScrollableHeight;
 
+		if (markLayoutDirty) {
+            markLayoutDirty = false;
+        }
 	}
 
 	/**
@@ -857,6 +860,26 @@ public class FreeFlowContainer extends AbsLayoutContainer {
 	 */
 	protected final int FLYWHEEL_TIMEOUT = 40;
 
+	/**
+     * check if laid out items are wide or tall enough to require scrolling
+     * 
+     * @return
+     */
+    protected boolean canScroll() {
+        boolean canScroll = false;
+
+        if (mLayout.horizontalScrollEnabled()
+                && this.mLayout.getContentWidth() > getWidth()) {
+            canScroll = true;
+        }
+        if (mLayout.verticalScrollEnabled()
+                && mLayout.getContentHeight() > getHeight()) {
+            canScroll = true;
+        }
+
+        return canScroll;
+    }
+
 	@Override
 	public boolean onTouchEvent(MotionEvent event) {
 
@@ -867,16 +890,7 @@ public class FreeFlowContainer extends AbsLayoutContainer {
 
 		// flag to check if laid out items are wide or tall enough
 		// to require scrolling
-		boolean canScroll = false;
-
-		if (mLayout.horizontalScrollEnabled()
-				&& this.mLayout.getContentWidth() > getWidth()) {
-			canScroll = true;
-		}
-		if (mLayout.verticalScrollEnabled()
-				&& mLayout.getContentHeight() > getHeight()) {
-			canScroll = true;
-		}
+		boolean canScroll = canScroll();
 
 		switch (event.getAction()) {
 		case (MotionEvent.ACTION_DOWN):
