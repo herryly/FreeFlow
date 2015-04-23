@@ -191,6 +191,8 @@ public class FreeFlowContainer extends AbsLayoutContainer {
     private int SCROLL_DURATION = 0x168;
     private int mScrollDuration = SCROLL_DURATION;
 
+    private FreeFlowItem mCurrentSelectItem = null;
+
 	public FreeFlowContainer(Context context) {
 		super(context);
 	}
@@ -252,7 +254,7 @@ public class FreeFlowContainer extends AbsLayoutContainer {
 			return;
 
 		}
-		
+
 //		if (widthMode != MeasureSpec.UNSPECIFIED && heightMode != MeasureSpec.UNSPECIFIED) {
         if (markAdapterDirty || markLayoutDirty) {
             // markAdapterDirty = false;
@@ -1999,7 +2001,7 @@ public class FreeFlowContainer extends AbsLayoutContainer {
      * @return Return true if the event was handled, else false.
      */
     public boolean executeKeyEvent(KeyEvent event) {
-        if (!canScroll()) {
+        if (!canScroll() || mLayout == null) {
             return false;
         }
 
@@ -2039,23 +2041,186 @@ public class FreeFlowContainer extends AbsLayoutContainer {
         int scrollDeltaX = 0;
         int scrollDeltaY = 0;
 
-        if (direction == View.FOCUS_UP) {
-            scrollDeltaY = -Math.min(viewPortY, maxYJump);
-        } else if (direction == View.FOCUS_DOWN) {
-            scrollDeltaY = Math.min(mScrollableHeight - viewPortY, maxYJump);
-        } else if (direction == View.FOCUS_LEFT) {
-            scrollDeltaX = -Math.min(viewPortX, maxXJump);
-        } else if (direction == View.FOCUS_RIGHT) {
-            scrollDeltaX = Math.min(mScrollableWidth - viewPortX, maxXJump);
+        FreeFlowItem nextItem = mLayout.getNextFreeFlowItem(
+                mCurrentSelectItem, direction);
+        if (nextItem != null) {
+            Rect tmp = new Rect(nextItem.frame);
+            tmp.offset(-viewPortX, -viewPortY);
+            mCurrentSelectItem = nextItem;
+
+            if (!isOffScreen(tmp)) {
+                int delta = computeScrollDeltaToGetChildRectOnScreen(direction, tmp);
+                if (direction == View.FOCUS_UP || direction == View.FOCUS_DOWN) {
+                    scrollDeltaY = delta;
+                } else {
+                    scrollDeltaX = delta;
+                }
+            } else {
+                //TODO: notify select item
+            }
+        } else {
+            if (direction == View.FOCUS_UP) {
+                scrollDeltaY = -Math.min(viewPortY, maxYJump);
+            } else if (direction == View.FOCUS_DOWN) {
+                scrollDeltaY = Math.min(mScrollableHeight - viewPortY, maxYJump);
+            } else if (direction == View.FOCUS_LEFT) {
+                scrollDeltaX = -Math.min(viewPortX, maxXJump);
+            } else if (direction == View.FOCUS_RIGHT) {
+                scrollDeltaX = Math.min(mScrollableWidth - viewPortX, maxXJump);
+            }
+
+            if (scrollDeltaX == 0 && scrollDeltaY == 0) {
+                return false;
+            }
         }
 
-        if (scrollDeltaX == 0 && scrollDeltaY == 0) {
-            return false;
+        if (scrollDeltaX != 0 || scrollDeltaY != 0) {
+            moveViewportSmoothBy(scrollDeltaX, scrollDeltaY, false);
         }
-
-        moveViewportSmoothBy(scrollDeltaX, scrollDeltaY, false);
 
         return true;
+    }
+
+    /**
+     * Compute the amount to scroll in the Y direction in order to get a
+     * rectangle completely on the screen (or, if taller than the screen, at
+     * least the first screen size chunk of it).
+     * 
+     * @param rect
+     *            The rect.
+     * @return The scroll delta.
+     */
+    protected int computeScrollDeltaToGetChildRectOnScreen(int direction,
+            Rect rect) {
+        if (getChildCount() == 0) {
+            return 0;
+        }
+
+        int scrollDelta = 0;
+
+        if (direction == View.FOCUS_UP || direction == View.FOCUS_DOWN) {
+            int height = getHeight();
+            int screenTop = getScrollY();
+            int screenBottom = screenTop + height;
+
+            int fadingEdge = getVerticalFadingEdgeLength();
+
+            // leave room for top fading edge as long as rect isn't at very top
+            if (rect.top > 0) {
+                screenTop += fadingEdge;
+            }
+
+            // leave room for bottom fading edge as long as rect isn't at very
+            // bottom
+            if (rect.bottom < getChildAt(0).getHeight()) {
+                screenBottom -= fadingEdge;
+            }
+
+            if (rect.bottom > screenBottom && rect.top > screenTop) {
+                // need to move down to get it in view: move down just enough so
+                // that the entire rectangle is in view (or at least the first
+                // screen size chunk).
+
+                if (rect.height() > height) {
+                    // just enough to get screen size chunk on
+                    scrollDelta += (rect.top - screenTop + 10);
+                } else {
+                    // get entire rect at bottom of screen
+                    scrollDelta += (rect.bottom - screenBottom + 10);
+                }
+
+            } else if (rect.top < screenTop && rect.bottom < screenBottom) {
+                // need to move up to get it in view: move up just enough so
+                // that
+                // entire rectangle is in view (or at least the first screen
+                // size chunk of it).
+
+                if (rect.height() > height) {
+                    // screen size chunk
+                    scrollDelta -= (screenBottom - rect.bottom + 10);
+                } else {
+                    // entire rect at top
+                    scrollDelta -= (screenTop - rect.top + 10);
+                }
+
+                // make sure we aren't scrolling any further than the top our
+                // content
+                scrollDelta = Math.max(scrollDelta, -viewPortY);
+            }
+        } else if (direction == View.FOCUS_LEFT
+                || direction == View.FOCUS_RIGHT) {
+            int width = getWidth();
+            int screenLeft = getScrollX();
+            int screenRight = screenLeft + width;
+
+            int fadingEdge = getHorizontalFadingEdgeLength();
+
+            // leave room for left fading edge as long as rect isn't at very
+            // left
+            if (rect.left > 0) {
+                screenLeft += fadingEdge;
+            }
+
+            // leave room for right fading edge as long as rect isn't at very
+            // right
+            if (rect.right < getChildAt(0).getWidth()) {
+                screenRight -= fadingEdge;
+            }
+
+            if (rect.right > screenRight && rect.left > screenLeft) {
+                // need to move right to get it in view: move right just enough
+                // so
+                // that the entire rectangle is in view (or at least the first
+                // screen size chunk).
+
+                if (rect.width() > width) {
+                    // just enough to get screen size chunk on
+                    scrollDelta += (rect.left - screenLeft + 10);
+                } else {
+                    // get entire rect at right of screen
+                    scrollDelta += (rect.right - screenRight + 10);
+                }
+
+            } else if (rect.left < screenLeft && rect.right < screenRight) {
+                // need to move right to get it in view: move right just enough
+                // so that
+                // entire rectangle is in view (or at least the first screen
+                // size chunk of it).
+
+                if (rect.width() > width) {
+                    // screen size chunk
+                    scrollDelta -= (screenRight - rect.right + 10);
+                } else {
+                    // entire rect at left
+                    scrollDelta -= (screenLeft - rect.left + 10);
+                }
+
+                // make sure we aren't scrolling any further than the left our
+                // content
+                scrollDelta = Math.max(scrollDelta, -viewPortX);
+            }
+        }
+
+        return scrollDelta;
+    }
+    
+    /**
+     * @return whether the descendant of this scroll view is scrolled off
+     *         screen.
+     */
+    private boolean isOffScreen(Rect r) {
+        return !isWithinDeltaOfScreen(r, 0);
+    }
+
+    /**
+     * @return whether the descendant of this scroll view is within delta pixels
+     *         of being on the screen.
+     */
+    private boolean isWithinDeltaOfScreen(Rect r, int delta) {
+        return (r.bottom + delta) >= getScrollY()
+                && (r.top - delta) <= (getScrollY() + getHeight())
+                || (r.right + delta) >= getScrollX()
+                && (r.left - delta) <= (getScrollX() + getWidth());
     }
 
 	/******** DEBUGGING HELPERS *******/
